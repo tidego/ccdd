@@ -1,6 +1,6 @@
-# CCDD — Claude Code 叮叮
+# CCDD — 叮叮通知
 
-Claude Code 任务完成通知系统。飞书推送 + macOS 音效 + 终端名识别，让你离开键盘也不会错过任务状态。
+AI 编程助手任务完成通知系统。支持 **Claude Code** 和 **Codex CLI**。飞书推送 + macOS 音效 + 终端名识别，让你离开键盘也不会错过任务状态。
 
 ## 功能
 
@@ -14,42 +14,44 @@ Claude Code 任务完成通知系统。飞书推送 + macOS 音效 + 终端名�
 
 ```bash
 # 1. 克隆
-git clone https://github.com/tidego/ccdd.git ~/.claude/ccdd
-cd ~/.claude/ccdd
-npm install
+git clone https://github.com/tidego/ccdd.git ~/.ccdd
+cd ~/.ccdd && npm install
 
 # 2. 配置飞书 webhook
 cp .env.example .env
 # 编辑 .env，填入你的 FEISHU_WEBHOOK_URL
-
-# 3. 配置 Claude Code hooks — 编辑 ~/.claude/settings.json
 ```
 
-在 `~/.claude/settings.json` 中添加：
+### Claude Code
+
+编辑 `~/.claude/settings.json`：
 
 ```json
 {
   "hooks": {
     "Stop": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node ~/.claude/ccdd/notify-system.js" }
-        ]
-      }
+      { "hooks": [{ "type": "command", "command": "node ~/.ccdd/notify-system.js" }] }
     ],
     "Notification": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node ~/.claude/ccdd/notify-system.js" }
-        ]
-      }
+      { "hooks": [{ "type": "command", "command": "node ~/.ccdd/notify-system.js" }] }
     ]
   }
 }
 ```
 
+### Codex CLI
+
+编辑 `~/.codex/config.toml`：
+
+```toml
+notify = ["node", "/path/to/ccdd/notify-codex.js"]
+```
+
+> Codex 目前支持 `agent-turn-complete` 事件，任务完成时自动触发飞书推送 + 音效。
+
+### 测试
+
 ```bash
-# 4. 测试
 node notify-sound.js --event Stop        # 听到 Glass 音效 + "任务完成"
 node notify-system.js --message "测试"    # 飞书 + 声音
 ```
@@ -81,7 +83,8 @@ node notify-system.js --message "测试"    # 飞书 + 声音
 
 ```
 ccdd/
-├── notify-system.js         # 主入口（hook 调用此文件）
+├── notify-system.js         # Claude Code 入口（hooks 调用）
+├── notify-codex.js          # Codex CLI 入口（notify 调用）
 ├── notify-sound.js          # 音效模块（afplay/say/PowerShell/bell）
 ├── notification-manager.js  # 通知管理器
 ├── feishu-notify.js         # 飞书 webhook 模块
