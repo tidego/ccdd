@@ -1,0 +1,18 @@
+{
+  "notification": {
+    "type": "feishu",
+    "feishu": {
+      "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_WEBHOOK_URL_HERE",
+      "enabled": true
+    },
+    "sound": {
+      "enabled": true,
+      "backup": true
+    }
+  },
+  "app": {
+    "name": "CCDD - Claude Code 叮叮",
+    "version": "2.0.0",
+    "description": "Claude Code 任务完成通知系统，支持飞书推送、macOS音效、终端名识别"
+  }
+}

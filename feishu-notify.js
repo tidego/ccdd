@@ -1,0 +1,288 @@
+/**
+ * 飞书通知脚本 - 手环震动提醒版
+ * 通过飞书webhook发送消息，触发手机通知并同步到手环震动提醒
+ */
+
+require('dotenv').config();
+const https = require('https');
+const http = require('http');
+
+/**
+ * 格式化时间为 MM-DD HH:mm
+ * @param {Date} date - 日期对象
+ * @returns {string} 格式化后的时间字符串
+ */
+function formatTime(date) {
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${month}-${day} ${hours}:${minutes}`;
+}
+
+/**
+ * 从任务信息推断状态
+ * @param {string} taskInfo - 任务信息文本
+ * @returns {string} 状态：'完成' | '失败' | '等待输入'
+ */
+function inferStatusFromText(taskInfo) {
+    // 入参兜底
+    taskInfo = String(taskInfo ?? '');
+    const text = taskInfo.toLowerCase();
+
+    // 等待输入关键词（移除过于宽泛的"确认"）
+    if (text.includes('permission') || text.includes('权限') ||
+        text.includes('idle') || text.includes('等待') ||
+        text.includes('elicitation') || text.includes('请输入')) {
+        return '等待输入';
+    }
+
+    // 失败关键词
+    if (text.includes('error') || text.includes('失败') ||
+        text.includes('exception') || text.includes('502') ||
+        text.includes('bad gateway') || /http\s*5\d{2}/.test(text)) {
+        return '失败';
+    }
+
+    return '完成';
+}
+
+/**
+ * 飞书webhook通知类
+ */
+class FeishuNotifier {
+    /**
+     * 构造函数
+     * @param {string} webhookUrl - 飞书机器人的webhook地址
+     */
+    constructor(webhookUrl) {
+        this.webhookUrl = webhookUrl;
+    }
+
+    /**
+     * 发送文本消息到飞书
+     * @param {string} message - 消息内容
+     * @param {Object} options - 额外选项
+     * @returns {Promise<boolean>} 发送是否成功
+     */
+    async sendText(message, options = {}) {
+        const payload = {
+            msg_type: "text",
+            content: {
+                text: message
+            }
+        };
+
+        return this._sendPayload(payload);
+    }
+
+    /**
+     * 发送富文本消息到飞书
+     * @param {string} title - 消息标题
+     * @param {string} content - 消息内容
+     * @param {Array} tags - 标签列表
+     * @returns {Promise<boolean>} 发送是否成功
+     */
+    async sendRichText(title, content, tags = []) {
+        const payload = {
+            msg_type: "post",
+            content: {
+                post: {
+                    zh_cn: {
+                        title: title,
+                        content: [
+                            [
+                                {
+                                    tag: "text",
+                                    text: content
+                                }
+                            ]
+                        ]
+                    }
+                }
+            }
+        };
+
+        return this._sendPayload(payload);
+    }
+
+    /**
+     * 发送交互式卡片消息
+     * @param {string} title - 卡片标题
+     * @param {string} content - 卡片内容
+     * @returns {Promise<boolean>} 发送是否成功
+     */
+    async sendCard(title, content) {
+        const payload = {
+            msg_type: "interactive",
+            content: {
+                type: "template",
+                data: {
+                    template_id: "AAqKGP7Qx6y9R",
+                    template_variable: {
+                        title: title,
+                        content: content
+                    }
+                }
+            }
+        };
+
+        return this._sendPayload(payload);
+    }
+
+    /**
+     * 发送HTTP请求到飞书webhook
+     * @param {Object} payload - 请求载荷
+     * @returns {Promise<boolean>} 发送是否成功
+     */
+    _sendPayload(payload) {
+        return new Promise((resolve, reject) => {
+            const data = JSON.stringify(payload);
+            const url = new URL(this.webhookUrl);
+
+            const options = {
+                hostname: url.hostname,
+                path: url.pathname + url.search,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                }
+            };
+
+            const protocol = url.protocol === 'https:' ? https : http;
+
+            const req = protocol.request(options, (res) => {
+                let responseData = '';
+
+                res.on('data', (chunk) => {
+                    responseData += chunk;
+                });
+
+                res.on('end', () => {
+                    try {
+                        const result = JSON.parse(responseData);
+                        if (result.code === 0) {
+                            console.log('✅ 飞书通知发送成功');
+                            resolve(true);
+                        } else {
+                            console.error('❌ 飞书通知发送失败:', result.msg);
+                            resolve(false);
+                        }
+                    } catch (error) {
+                        console.error('❌ 解析飞书响应失败:', error.message);
+                        resolve(false);
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                console.error('❌ 发送飞书请求失败:', error.message);
+                resolve(false);
+            });
+
+            req.write(data);
+            req.end();
+        });
+    }
+}
+
+/**
+ * 任务完成通知函数
+ * @param {string} taskInfo - 任务信息
+ * @param {string} webhookUrl - 飞书webhook地址
+ * @param {string} projectName - 项目名称
+ */
+async function notifyTaskCompletion(taskInfo = "Claude Code任务已完成", webhookUrl = null, projectName = "") {
+    // 从环境变量或配置文件读取webhook地址
+    const FEISHU_WEBHOOK_URL = webhookUrl ||
+                             process.env.FEISHU_WEBHOOK_URL ||
+                             'https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_WEBHOOK_URL_HERE';
+
+    if (!FEISHU_WEBHOOK_URL || FEISHU_WEBHOOK_URL.includes('YOUR_WEBHOOK_URL_HERE')) {
+        console.log('⚠️  请先配置飞书webhook地址');
+        console.log('📝 配置方法：');
+        console.log('1. 在飞书中创建群组');
+        console.log('2. 添加自定义机器人');
+        console.log('3. 复制webhook地址');
+        console.log('4. 设置环境变量 FEISHU_WEBHOOK_URL 或修改脚本中的地址');
+        return false;
+    }
+
+    const notifier = new FeishuNotifier(FEISHU_WEBHOOK_URL);
+
+    // 推断状态
+    const status = inferStatusFromText(taskInfo);
+    const formattedTime = formatTime(new Date());
+
+    // 标题：【状态】项目名
+    const title = projectName ? `【${status}】${projectName}` : `【${status}】任务通知`;
+
+    // 正文：分层显示
+    let content = `■ 时间：${formattedTime}\n`;
+
+    if (status === '失败') {
+        // 失败时：错误信息过长则裁剪
+        const errorText = taskInfo.length > 500 ? taskInfo.slice(0, 500) + '...' : taskInfo;
+        content += `■ 错误：${errorText}`;
+    } else if (status === '等待输入') {
+        content += `■ 原因：需要你的输入\n`;
+        content += `■ 详情：${taskInfo}`;
+    } else {
+        content += `■ 状态：任务已完成\n`;
+        const detailText = taskInfo.length > 200 ? taskInfo.slice(0, 200) + '...' : taskInfo;
+        content += `■ 详情：${detailText}`;
+    }
+
+    try {
+        // 发送富文本消息
+        const success = await notifier.sendRichText(title, content);
+
+        if (success) {
+            console.log('🎉 任务完成通知已发送到飞书！');
+            console.log('📱 您的手机将收到通知，小米手环会震动提醒');
+        } else {
+            console.log('❌ 飞书通知发送失败，请检查webhook配置');
+        }
+
+        return success;
+    } catch (error) {
+        console.error('❌ 发送飞书通知时发生错误:', error.message);
+        return false;
+    }
+}
+
+/**
+ * 获取命令行参数
+ */
+function getCommandLineArgs() {
+    const args = process.argv.slice(2);
+    const options = {};
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg.startsWith('--')) {
+            const key = arg.slice(2);
+            const value = args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true;
+            options[key] = value;
+            if (value !== true) i++; // 跳过下一个参数，因为它已经被当作值处理了
+        }
+    }
+
+    return options;
+}
+
+// 如果直接运行此脚本
+if (require.main === module) {
+    const options = getCommandLineArgs();
+    const taskInfo = options.message || options.task || "Claude Code任务已完成";
+    const webhookUrl = options.webhook || null;
+
+    console.log('🚀 开始发送飞书通知...');
+    notifyTaskCompletion(taskInfo, webhookUrl);
+}
+
+module.exports = {
+    FeishuNotifier,
+    notifyTaskCompletion
+};
