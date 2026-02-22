@@ -9,9 +9,10 @@ const { FeishuNotifier } = require('./feishu-notify');
  * 通知管理器类
  */
 class NotificationManager {
-    constructor(config, projectName) {
+    constructor(config, projectName, source = '') {
         this.config = config;
         this.projectName = projectName;
+        this.source = source;
         this.notifiers = this.initializeNotifiers();
     }
 
@@ -28,7 +29,7 @@ class NotificationManager {
                 notifier: new FeishuNotifier(this.config.notification.feishu.webhook_url),
                 send: async (taskInfo) => {
                     const { notifyTaskCompletion } = require('./feishu-notify');
-                    return await notifyTaskCompletion(taskInfo, this.config.notification.feishu.webhook_url, this.projectName);
+                    return await notifyTaskCompletion(taskInfo, this.config.notification.feishu.webhook_url, this.projectName, this.source);
                 }
             };
         }

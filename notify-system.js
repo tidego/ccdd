@@ -110,7 +110,7 @@ class NotificationSystem {
         this.config = this.loadConfig();
         this.projectName = this.getProjectName();
         this.terminalName = this.getTerminalName();
-        this.notificationManager = new NotificationManager(this.config, this.projectName);
+        this.notificationManager = new NotificationManager(this.config, this.projectName, 'Claude Code');
     }
 
     /**

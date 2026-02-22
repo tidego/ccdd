@@ -193,7 +193,7 @@ class FeishuNotifier {
  * @param {string} webhookUrl - 飞书webhook地址
  * @param {string} projectName - 项目名称
  */
-async function notifyTaskCompletion(taskInfo = "Claude Code任务已完成", webhookUrl = null, projectName = "") {
+async function notifyTaskCompletion(taskInfo = "Claude Code任务已完成", webhookUrl = null, projectName = "", source = "") {
     // 从环境变量或配置文件读取webhook地址
     const FEISHU_WEBHOOK_URL = webhookUrl ||
                              process.env.FEISHU_WEBHOOK_URL ||
@@ -215,8 +215,9 @@ async function notifyTaskCompletion(taskInfo = "Claude Code任务已完成", web
     const status = inferStatusFromText(taskInfo);
     const formattedTime = formatTime(new Date());
 
-    // 标题：【状态】项目名
-    const title = projectName ? `【${status}】${projectName}` : `【${status}】任务通知`;
+    // 标题：【状态】来源 · 项目名
+    const prefix = source || 'Claude Code';
+    const title = projectName ? `【${status}】${prefix} · ${projectName}` : `【${status}】${prefix}`;
 
     // 正文：分层显示
     let content = `■ 时间：${formattedTime}\n`;

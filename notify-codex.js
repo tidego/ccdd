@@ -173,7 +173,7 @@ function getProjectName(cwd) {
     console.log(`📝 ${message}`);
 
     // 飞书推送
-    const notificationManager = new NotificationManager(config, projectName);
+    const notificationManager = new NotificationManager(config, projectName, 'Codex');
     await notificationManager.sendAllNotifications(message);
 
     // 声音提醒
